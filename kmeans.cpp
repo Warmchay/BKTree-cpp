@@ -1,8 +1,12 @@
+#include <cstddef>
+#include <cstdio>
+#include <iterator>
 #include <omp.h>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <ostream>
 #include <vector>
 
 using namespace std;
@@ -12,40 +16,25 @@ class Point
 private:
     int pointId, clusterId;
     int dimensions;
-    vector<double> values;
+    vector<float> values;
 
-    vector<double> lineToVec(string &line)
+    vector<float> bufferToVec(vector<float> &buffer)
     {
-        vector<double> values;
-        string tmp = "";
+        vector<float> values;
 
-        for (int i = 0; i < (int)line.length(); i++)
+        for (int i = 0; i < (int)buffer.size() / 4; i++)
         {
-            if ((48 <= int(line[i]) && int(line[i])  <= 57) || line[i] == '.' || line[i] == '+' || line[i] == '-' || line[i] == 'e')
-            {
-                tmp += line[i];
-            }
-            else if (tmp.length() > 0)
-            {
-
-                values.push_back(stod(tmp));
-                tmp = "";
-            }
-        }
-        if (tmp.length() > 0)
-        {
-            values.push_back(stod(tmp));
-            tmp = "";
+            values.push_back((float)buffer[i]);
         }
 
         return values;
     }
 
 public:
-    Point(int id, string line)
+    Point(int id, vector<float> buffer)
     {
         pointId = id;
-        values = lineToVec(line);
+        values = bufferToVec(buffer);
         dimensions = values.size();
         clusterId = 0; // Initially not assigned to any cluster
     }
@@ -59,6 +48,15 @@ public:
     void setCluster(int val) { clusterId = val; }
 
     double getVal(int pos) { return values[pos]; }
+
+    vector<float> getFullVal() { return values; }
+
+    void printFullVal() {
+        for (auto x : values) {
+            std::cout << x << " ";
+        }
+        std::cout << std::endl;
+    }
 };
 
 class Cluster
@@ -306,6 +304,36 @@ public:
     }
 };
 
+void load_fvec_data(char* filename, unsigned& num, unsigned& dim, vector<Point>& all_points) { 
+    std::ifstream in(filename, std::ios::binary);
+    if (!in.is_open()) {
+        std::cout << "open file error" << std::endl;
+        exit(-1);
+    }
+    in.read((char*)&dim, 4);	//读取向量维度
+    in.seekg(0, std::ios::end);	//光标定位到文件末尾
+    std::ios::pos_type ss = in.tellg();	//获取文件大小（多少字节）
+    size_t fsize = (size_t)ss;
+    num = (unsigned)(fsize / (dim + 1) / 4);	//数据的个数 (ID + dim)
+    // char* data;
+    
+    int pointId = 1;
+    in.seekg(0, std::ios::beg);	//光标定位到起始处
+    std::cout << dim  << " "  << num << std::endl; 
+    std::vector<float> buffer(dim * 4);
+    for (size_t i = 0; i < num; i++) {
+        
+        in.seekg(4, std::ios::cur);	//光标向右移动4个字节
+        in.read((char*)buffer.data(),  buffer.size());	//读取数据到一维数据data中
+        Point point(pointId, buffer);
+        pointId++;
+        std::cout << point.getID() << " " << point.getDimensions() << std::endl;
+        all_points.push_back(point);
+    }
+
+    in.close();
+}
+
 int main(int argc, char **argv)
 {
     // Need 3 arguments (except filename) to run, else exit
@@ -330,21 +358,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // Fetching points from file
-    int pointId = 1;
+    unsigned points_num, dim;
     vector<Point> all_points;
-    string line;
+    load_fvec_data(argv[1], points_num, dim, all_points);
+    std::cout << std::endl << "points_num: "<< points_num << std::endl << "data dimension: " << dim << std::endl;
 
-    while (getline(infile, line))
-    {
-        Point point(pointId, line);
-        all_points.push_back(point);
-        pointId++;
-    }
-    
-    infile.close();
-    cout << "\nData fetched successfully!" << endl
-         << endl;
+    cout << "\nData fetched successfully!" << endl;
 
     // Return if number of clusters > number of points
     if ((int)all_points.size() < K)
