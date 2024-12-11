@@ -29,19 +29,23 @@ typedef struct {
 class Cluster_centroid {
 private: 
     int cluster_id_;
+    int level_;
     vector<double> cluster_centroid_;
 public:
     Cluster_centroid() {
         cluster_id_ = 0;
+        level_ = 0;
         cluster_centroid_ = vector<double> {};
     }
 
-    Cluster_centroid(int cluster_id, vector<double> cluster_centroid) {
+    Cluster_centroid(int cluster_id, int level, vector<double> cluster_centroid) {
         this->cluster_id_ = cluster_id;
+        this->level_ = level;
         this->cluster_centroid_ = cluster_centroid;
     }
 
     int get_cluster_id() { return cluster_id_; }
+    int get_cluster_level() { return level_; }
     vector<double> get_cluster_centroid() { return cluster_centroid_; }
 
 };
@@ -91,9 +95,9 @@ public:
 
     int getID() { return pointId; }
 
-    void setCluster(int val) { clusterId = val; }
+    void setCluster(int val) { this->clusterId = val;}
 
-    void setLevel(int val) { levelID = val; }
+    void setLevel(int val) { this->levelID = val; }
 
     double getVal(int pos) { return values[pos]; }
 
@@ -115,6 +119,12 @@ private:
     vector<Point> points;
 
 public:
+    Cluster() {
+        this->clusterId = 0;
+        this->levelId = 0;
+        this->points.clear();
+    }
+
     Cluster(int clusterId, Point centroid)
     {
         this->clusterId = clusterId;
@@ -372,91 +382,149 @@ public:
 class BKmeans
 {
 private:
-    int level, dim, total_points, k_hortizontal_num, k_vertical_num;
-    int inner_max_size, iters;
-    vector<Cluster> clusters;
+    int level_, dim_, total_points_, k_hortizontal_num_, k_vertical_num_;
+    int inner_max_size_, iters_;
+    int k_index_;
+    // vector<Cluster> clusters_;
+    map<int, Cluster> clusters_; // (cluster id, Cluster)
     
 public:
-    BKmeans(int dim, int level, int total_points, int iterations, int k_vertical_num) {
-        this->dim = dim;
-        this->level = level;
-        this->total_points = total_points;
-        this->iters = iterations;
-        this->k_hortizontal_num = pow(2, level);
-        this->k_vertical_num = k_vertical_num;
-        this->inner_max_size = ceil(total_points / (double)this->k_hortizontal_num);
+    BKmeans(int dim, int level, int total_points, int iterations, int k_vertical_num, int k_index) {
+        this->dim_ = dim;
+        this->level_ = level;
+        this->total_points_ = total_points;
+        this->iters_ = iterations;
+        this->k_index_ = k_index;
+        this->k_hortizontal_num_ = k_index + k_vertical_num;
+        this->k_vertical_num_ = k_vertical_num;
+        this->inner_max_size_ = ceil(total_points / (double)this->k_vertical_num_);
     }
 
     void run_bkmeans(vector<Point> &all_points, int level) {
         
         // 1. 选该层所有聚类的质心向量
         vector<int> use_ids;
-        for (int i = 0; i < this->k_hortizontal_num; ++i) {
+        for (int i = this->k_index_; i < this->k_hortizontal_num_; ++i) {
             while (true) {
-                int centroid_id = rand() % all_points.size();
+                int centroid_id = rand() % total_points_;
                 if ( find(use_ids.begin(), use_ids.end(), centroid_id) 
                      == use_ids.end() ) 
                 {   
                     Point point = all_points[centroid_id];
+                    use_ids.push_back(centroid_id);
                     Cluster tmp_cluster{i, level, point};
-                    clusters.push_back(tmp_cluster);
+                    // clusters_[i] = tmp_cluster;
+                    if (clusters_.find(i) == clusters_.end()) {
+                        
+                    }
+                    // clusters_.push_back(tmp_clustler);
                     break;
                 }
             }
         }
-        std::cout << "Clusters initialized = " << clusters.size() << std::endl;
-        std::cout << "Running KMeans Clustering" << std::endl;
 
         // 2. 进行 balanced kmeans
         // 选好了该层的质心向量后，我们需要将这些 points 分配到相应的聚类当中，并且限制数量
-        omp_init_lock(&lock);
-        #pragma omp parallel for reduction(&&: done) num_threads(16)
-        for (auto p : all_points) {
-            int best_cluster_id = order_nearest_cluster(p, clusters);
-            clusters[best_cluster_id].addPoint(p);
-            clusters[best_cluster_id].getPoint(0);
+        
+        for (auto& p : all_points) {
+            int best_cluster_id = order_nearest_cluster(p);
+            
+            p.setCluster(best_cluster_id);
 
-        }
-        omp_destroy_lock(&lock);
-        
-        // 
-        
+            clusters_[best_cluster_id].addPoint(p);
+            // cout << best_cluster_id << endl;
+        }        
     }
 
-    int order_nearest_cluster(Point p, vector<Cluster> clusters) {
+    void run_bkmeans(vector<Point> &all_points, int level, vector<Point> &ori_points) {
+        
+        // 1. 选该层所有聚类的质心向量
+        vector<int> use_ids;
+        cout << "ori size: " << all_points.size() << endl;
+
+
+        for (int i = this->k_index_; i < this->k_hortizontal_num_; ++i) {
+            while (true) {
+                int centroid_id = rand() % total_points_;
+                if ( find(use_ids.begin(), use_ids.end(), centroid_id) 
+                     == use_ids.end() ) 
+                {   
+                    Point point = all_points[centroid_id];
+                    use_ids.push_back(centroid_id);
+                    Cluster tmp_cluster{i, level, point};
+                    clusters_[i] = tmp_cluster;
+                    break;
+                }
+            }
+        }
+
+
+
+        // 2. 进行 balanced kmeans
+        // 选好了该层的质心向量后，我们需要将这些 points 分配到相应的聚类当中，并且限制数量
+        // omp_init_lock(&lock);
+        // #pragma omp parallel for reduction(&&: done) num_threads(16)
+        int sum = 0;
+        for (auto& p : all_points) {
+            sum++;
+            int best_cluster_id = order_nearest_cluster(p);
+            p.setCluster(best_cluster_id);
+            if(find(use_ids.begin(), use_ids.end(), p.getID()) == use_ids.end()) {
+                clusters_[best_cluster_id].addPoint(p);
+                ori_points[p.getID()].setCluster(best_cluster_id);
+            }
+        }
+        int delete_key = 0;
+        bool flag = false;
+        for (auto m : clusters_) {
+            if (m.first < this->k_index_) {
+                delete_key = m.first;
+                flag = true;
+            }
+        }
+        if (flag) {
+            clusters_.erase(delete_key);
+        }
+        cout << "sum : "<< sum<< endl;
+        for (auto c : clusters_) {
+            cout << c.second.getId() << " " << c.second.getSize() << endl;
+        }
+    }
+
+    int order_nearest_cluster(Point p) {
         // 返回没有满的 clusters，且距离最近的质心向量
         double min_dist = INT32_MAX, sum = 0.0, dist = 0.0;
         int best_cluster_id = 0;
-        for (auto c : clusters) {
-            if (dim == 1) {
-                dist = abs(c.getCentroidByPos(0) - p.getVal(0));
+        for (auto c : clusters_) {
+            sum = 0.0;
+            if (dim_ == 1) {
+                dist = abs(c.second.getCentroidByPos(0) - p.getVal(0));
             } else {
-                for (int i = 0; i < dim; ++i) {
-                    sum += pow(c.getCentroidByPos(i) - p.getVal(i), 2.0);
+                for (int i = 0; i < dim_; ++i) {
+                    sum += pow(c.second.getCentroidByPos(i) - p.getVal(i), 2.0);
                 }
                 dist = sqrt(sum);
             }
-            cluster_with_distance tmp = {c.getId(), dist};
-            omp_set_lock(&lock);
-            if (c.getSize() < inner_max_size && dist < min_dist) {
+            cluster_with_distance tmp = {c.second.getId(), dist};
+            // omp_set_lock(&lock);
+            if (c.second.getSize() < inner_max_size_ && dist < min_dist) {
                 min_dist = dist;
-                best_cluster_id = c.getId();
+                best_cluster_id = c.second.getId();
             }
-            omp_unset_lock(&lock);
+            // omp_unset_lock(&lock);
         }
-        
         return best_cluster_id;
     }
 
     vector<double> get_cluster_centroid_by_id(int cluster_id) {
         vector<double> ret;
-        for (int i = 0; i < dim; ++i) {
-            ret.push_back(clusters[cluster_id].getCentroidByPos(i));
+        for (int i = 0; i < dim_; ++i) {
+            ret.push_back(clusters_[cluster_id].getCentroidByPos(i));
         }
         return ret;
     }
 
-    int get_vector_num_by_cluster_id(int cluster_id) { return clusters[cluster_id].getSize(); }
+    int get_vector_num_by_cluster_id(int cluster_id) { return clusters_[cluster_id].getSize(); }
     
 };
 
@@ -467,8 +535,11 @@ private:
     int level_num_, dim_, total_points_;
     int inner_max_size_, iters_, k_vertical_num_;
     vector<cluster_centroid_with_level> cluster_centroid_with_level_; 
+    map<int, vector<Cluster_centroid>> cluster_with_level_;
 
 public:
+    // 对于用户而言，最方便的 hkbmeans 方式应该是输入每个子聚类应该有的向量数目
+    // 但那样不好规定层高和每一层有多少类，也可以算出应该有的向量数目，只需要算最后一层就好
     HBKmeans(int dim, int level_num, int total_points, int iterations, int k_vertical_num) {
         this->dim_ = dim;
         this->level_num_ = level_num;
@@ -477,55 +548,73 @@ public:
         this->k_vertical_num_ = k_vertical_num;
     }
 
+    void print_vector(vector<double> vec) {
+        cout << "[";
+        for (auto v : vec) {
+            cout << v << " ";
+        }
+        cout << "]" << endl;
+    }
+
     void run_hbkmeans(vector<Point> &all_points) {
         vector<Cluster_centroid> cluster_centroid;
         for (int i = 1; i <= level_num_; ++i) {
+            std::cout << "Level " << i << " BKMeans start" << std::endl;
             if (i == 1) {
                 // 1. 执行 bkmeans
-                BKmeans tmp_bkmeans = {dim_, i, total_points_, iters_, k_vertical_num_};
+                BKmeans tmp_bkmeans = {dim_, i, total_points_, iters_, k_vertical_num_, 0};
                 tmp_bkmeans.run_bkmeans(all_points, i);
-                for (int j = 0; j < pow(2, i); ++i) {
+                
+                // std::cout << "Inject bkmeans centroid start" << std::endl;
+                for (int j = 0; j < pow(2, i); ++j) {
                     int cluster_id = j;
                     vector<double> tmp_centroid = tmp_bkmeans.get_cluster_centroid_by_id(j);
-                    Cluster_centroid tmp_cluster_centroid = {j, tmp_centroid};
-                    cluster_centroid.push_back(tmp_cluster_centroid);
-                }
-                cluster_centroid_with_level tmp_cluster_centroid_with_level = {i, cluster_centroid};
-                cluster_centroid_with_level_.push_back(tmp_cluster_centroid_with_level);    
-            } else {
-                // 2. 根据上一轮的 cluster id，再次 kmeans 不同 cluster 内的向量
-                // 2.1 将 points 根据不同 cluster id 划分好
-                map<int, vector<Point>> cluster_with_points;
-                for (auto p : all_points) {
-                    cluster_with_points[p.getCluster()].push_back(p);
-                }
-                // 2.2 训练不同 cluster 内的 points
-                for (auto m : cluster_with_points) {
-                    BKmeans tmp_bkmeans = {dim_, i, (int)m.second.size(), iters_, k_vertical_num_};
-                    tmp_bkmeans.run_bkmeans(m.second, i);
-                    // 2.3 将不同 cluster 的质心向量记录到 hbkmeans 的队列中
-                    for (int j = 0; j < pow(2, i); ++i) {
-                        int cluster_id = j;
-                        vector<double> tmp_centroid = tmp_bkmeans.get_cluster_centroid_by_id(j);
-                        Cluster_centroid tmp_cluster_centroid = {j, tmp_centroid};
-                        cluster_centroid.push_back(tmp_cluster_centroid);
-                    }
-                    cluster_centroid_with_level tmp_cluster_centroid_with_level = {i, cluster_centroid};
-                    cluster_centroid_with_level_.push_back(tmp_cluster_centroid_with_level); 
+                    Cluster_centroid tmp_cluster_centroid = {j, i, tmp_centroid};
+                    cluster_with_level_[i].push_back(tmp_cluster_centroid);
+                    // cout << "Centroid " << j << ":";
+                    // print_vector(tmp_centroid);
                 }
 
             }
-            
+            else {
+                // 2. 根据上一轮的 cluster id，再次 kmeans 不同 cluster 内的向量
+                // 2.1 将 points 根据不同 cluster id 划分好
+                map<int, vector<Point>> cluster_with_points;
+                for (auto& p : all_points) {
+                    cluster_with_points[p.getCluster()].push_back(p);
+                }
+                // 2.2 训练不同 cluster 内的 points
+                int round = 0;
+                for (auto m : cluster_with_points) {
+                    cout << "Cluster ID:" << m.first << " size: " << m.second.size() << endl;
+                    BKmeans tmp_bkmeans = {dim_, i, (int)m.second.size(), iters_, k_vertical_num_, 2 * round};
+                    tmp_bkmeans.run_bkmeans(m.second, i, all_points);
+                    // 2.3 将不同 cluster 的质心向量记录到 hbkmeans 的队列中
+                    for (int j = 2 * round; j < (2 * round + this->k_vertical_num_); ++j) {
+                        int cluster_id = j;
+                        vector<double> tmp_centroid = tmp_bkmeans.get_cluster_centroid_by_id(j);
+                        Cluster_centroid tmp_cluster_centroid = {j, i, tmp_centroid};
+                        cluster_with_level_[i].push_back(tmp_cluster_centroid);
+                        // cout << "Centroid " << j << ":";
+                        // print_vector(tmp_centroid);
+                    }
+                    round++;
+                }
+            }
         }
         // 3. 运行结束, 打印层级和每层的 cluster id
-        for (auto cluster_centroid : cluster_centroid_with_level_) {
-            int level = cluster_centroid.level_;
-            cout << "level " << level << ": ";
-            for (auto centroid : cluster_centroid.cluster_centroid_) {
-                cout << centroid.get_cluster_id() << " ";
+        for (auto it = cluster_with_level_.begin(); it != cluster_with_level_.end(); it++) {
+            cout << "Level " << it->first << ": ";
+            for (auto cluster : it->second) {
+                cout << cluster.get_cluster_id() << " ";
             }
             cout << endl;
         }
+
+        cout << "Print each vector belong clusters:" << endl;
+        // for (auto p : all_points) {
+        //     cout << "Point ID: " << p.getID() << " Cluster ID: " << p.getCluster() << endl;
+        // }
     }
 
 };
@@ -547,13 +636,13 @@ void load_fvec_data(char* filename, unsigned& num, unsigned& dim, vector<Point>&
     in.seekg(0, std::ios::beg);	//光标定位到起始处
     std::cout << dim  << " "  << num << std::endl; 
     std::vector<float> buffer(dim * 4);
-    for (size_t i = 0; i < num; i++) {
+    for (size_t i = 0; i < 500; i++) {
         
         in.seekg(4, std::ios::cur);	//光标向右移动4个字节
         in.read((char*)buffer.data(),  buffer.size());	//读取数据到一维数据data中
         Point point(pointId, buffer);
         pointId++;
-        std::cout << point.getID() << " " << point.getDimensions() << std::endl;
+        //std::cout << point.getID() << " " << point.getDimensions() << std::endl;
         all_points.push_back(point);
     }
 
@@ -601,8 +690,10 @@ int main(int argc, char **argv)
     // Running K-Means Clustering
     int iters = 100;
 
-    KMeans kmeans(K, iters, output_dir);
-    kmeans.run(all_points);
+    // KMeans kmeans(K, iters, output_dir);
+    // kmeans.run(all_points);
 
+    HBKmeans hbkmeans(dim, 3, all_points.size(), iters, 2);
+    hbkmeans.run_hbkmeans(all_points);
     return 0;
 }

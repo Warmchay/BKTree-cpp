@@ -1,5 +1,5 @@
 kmeans: kmeans.cpp
-	g++ kmeans.cpp -o kmeans
+	g++ -g -o  kmeans kmeans.cpp
 
 clean:
 	rm kmeans
