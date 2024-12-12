@@ -404,6 +404,7 @@ public:
         
         // 1. 选该层所有聚类的质心向量
         vector<int> use_ids;
+        cout << "L" << level << " all points size in bkmeans: " << all_points.size() << endl;
         for (int i = this->k_index_; i < this->k_hortizontal_num_; ++i) {
             while (true) {
                 int centroid_id = rand() % total_points_;
@@ -415,13 +416,14 @@ public:
                     Cluster tmp_cluster{i, level, point};
                     // clusters_[i] = tmp_cluster;
                     if (clusters_.find(i) == clusters_.end()) {
-                        
+                        clusters_.emplace(i, tmp_cluster);
                     }
                     // clusters_.push_back(tmp_clustler);
                     break;
                 }
             }
         }
+
 
         // 2. 进行 balanced kmeans
         // 选好了该层的质心向量后，我们需要将这些 points 分配到相应的聚类当中，并且限制数量
@@ -431,8 +433,15 @@ public:
             
             p.setCluster(best_cluster_id);
 
+            if (find(use_ids.begin(), use_ids.end(), p.getID()) != use_ids.end()) {
+                continue;
+            }
             clusters_[best_cluster_id].addPoint(p);
             // cout << best_cluster_id << endl;
+        }
+
+        for (auto c : clusters_) {
+            cout << "BKmeans Cluster ID(L0): " << c.second.getId() << " Cluster size: " << c.second.getSize() << endl;
         }        
     }
 
@@ -440,9 +449,7 @@ public:
         
         // 1. 选该层所有聚类的质心向量
         vector<int> use_ids;
-        cout << "ori size: " << all_points.size() << endl;
-
-
+        cout << "L" << level << " all points size in bkmeans: " << all_points.size() << endl;
         for (int i = this->k_index_; i < this->k_hortizontal_num_; ++i) {
             while (true) {
                 int centroid_id = rand() % total_points_;
@@ -452,21 +459,17 @@ public:
                     Point point = all_points[centroid_id];
                     use_ids.push_back(centroid_id);
                     Cluster tmp_cluster{i, level, point};
-                    clusters_[i] = tmp_cluster;
+                    if (clusters_.find(i) == clusters_.end()) {
+                        clusters_.emplace(i, tmp_cluster);
+                    }
                     break;
                 }
             }
         }
 
-
-
         // 2. 进行 balanced kmeans
         // 选好了该层的质心向量后，我们需要将这些 points 分配到相应的聚类当中，并且限制数量
-        // omp_init_lock(&lock);
-        // #pragma omp parallel for reduction(&&: done) num_threads(16)
-        int sum = 0;
         for (auto& p : all_points) {
-            sum++;
             int best_cluster_id = order_nearest_cluster(p);
             p.setCluster(best_cluster_id);
             if(find(use_ids.begin(), use_ids.end(), p.getID()) == use_ids.end()) {
@@ -485,9 +488,9 @@ public:
         if (flag) {
             clusters_.erase(delete_key);
         }
-        cout << "sum : "<< sum<< endl;
+        
         for (auto c : clusters_) {
-            cout << c.second.getId() << " " << c.second.getSize() << endl;
+            cout << "BKMeans Cluster ID: " << c.second.getId() << " Cluster size: " << c.second.getSize() << endl;
         }
     }
 
