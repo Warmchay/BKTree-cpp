@@ -468,7 +468,7 @@ public:
         }
 
         // 2. 进行 balanced kmeans
-        // 选好了该层的质心向量后，我们需要将这些 points 分配到相应的聚类当中，并且限制数量
+        // 选好了该层的质心向量后，需要将这些 points 分配到相应的聚类当中，并且限制数量
         for (auto& p : all_points) {
             int best_cluster_id = order_nearest_cluster(p);
             p.setCluster(best_cluster_id);
@@ -509,12 +509,10 @@ public:
                 dist = sqrt(sum);
             }
             cluster_with_distance tmp = {c.second.getId(), dist};
-            // omp_set_lock(&lock);
             if (c.second.getSize() < inner_max_size_ && dist < min_dist) {
                 min_dist = dist;
                 best_cluster_id = c.second.getId();
             }
-            // omp_unset_lock(&lock);
         }
         return best_cluster_id;
     }
@@ -537,7 +535,7 @@ private:
     vector<BKmeans> balanced_kmeans_;
     int level_num_, dim_, total_points_;
     int inner_max_size_, iters_, k_vertical_num_;
-    vector<cluster_centroid_with_level> cluster_centroid_with_level_; 
+    // vector<cluster_centroid_with_level> cluster_centroid_with_level_; 
     map<int, vector<Cluster_centroid>> cluster_with_level_;
 
 public:
@@ -568,14 +566,12 @@ public:
                 BKmeans tmp_bkmeans = {dim_, i, total_points_, iters_, k_vertical_num_, 0};
                 tmp_bkmeans.run_bkmeans(all_points, i);
                 
-                // std::cout << "Inject bkmeans centroid start" << std::endl;
                 for (int j = 0; j < pow(2, i); ++j) {
                     int cluster_id = j;
                     vector<double> tmp_centroid = tmp_bkmeans.get_cluster_centroid_by_id(j);
+                    // cout << "level 0 cluster id: " << j << " size: " << tmp_bkmeans.get_vector_num_by_cluster_id(j) << endl;
                     Cluster_centroid tmp_cluster_centroid = {j, i, tmp_centroid};
                     cluster_with_level_[i].push_back(tmp_cluster_centroid);
-                    // cout << "Centroid " << j << ":";
-                    // print_vector(tmp_centroid);
                 }
 
             }
@@ -583,8 +579,18 @@ public:
                 // 2. 根据上一轮的 cluster id，再次 kmeans 不同 cluster 内的向量
                 // 2.1 将 points 根据不同 cluster id 划分好
                 map<int, vector<Point>> cluster_with_points;
+                int c1 = 0, c2 = 0;
                 for (auto& p : all_points) {
                     cluster_with_points[p.getCluster()].push_back(p);
+                    if (p.getCluster() == 0) {
+                        c1++;
+                    } else {
+                        c2++;
+                    }
+                }
+                cout << "C1 size = " << c1 << " C2 size = "<< c2 << endl;
+                for (auto cwp : cluster_with_points) {
+                    cout << "CLuster ID: " << cwp.first << " Cluster Size: " << cwp.second.size() << endl;
                 }
                 // 2.2 训练不同 cluster 内的 points
                 int round = 0;
@@ -598,8 +604,6 @@ public:
                         vector<double> tmp_centroid = tmp_bkmeans.get_cluster_centroid_by_id(j);
                         Cluster_centroid tmp_cluster_centroid = {j, i, tmp_centroid};
                         cluster_with_level_[i].push_back(tmp_cluster_centroid);
-                        // cout << "Centroid " << j << ":";
-                        // print_vector(tmp_centroid);
                     }
                     round++;
                 }
@@ -614,7 +618,7 @@ public:
             cout << endl;
         }
 
-        cout << "Print each vector belong clusters:" << endl;
+        // cout << "Print each vector belong clusters:" << endl;
         // for (auto p : all_points) {
         //     cout << "Point ID: " << p.getID() << " Cluster ID: " << p.getCluster() << endl;
         // }
@@ -696,7 +700,7 @@ int main(int argc, char **argv)
     // KMeans kmeans(K, iters, output_dir);
     // kmeans.run(all_points);
 
-    HBKmeans hbkmeans(dim, 3, all_points.size(), iters, 2);
+    HBKmeans hbkmeans(dim, 7, all_points.size(), iters, 2);
     hbkmeans.run_hbkmeans(all_points);
     return 0;
 }
