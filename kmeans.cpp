@@ -695,18 +695,13 @@ int main(int argc, char **argv)
 
     cout << "\nData fetched successfully!" << endl;
 
-    // Return if number of clusters > number of points
     if ((int)all_points.size() < K)
     {
         cout << "Error: Number of clusters greater than number of points." << endl;
         return 1;
     }
 
-    // Running K-Means Clustering
     int iters = 100;
-
-    // KMeans kmeans(K, iters, output_dir);
-    // kmeans.run(all_points);
 
     HBKmeans hbkmeans(dim, 7, all_points.size(), iters, 2);
     hbkmeans.run_hbkmeans(all_points);
